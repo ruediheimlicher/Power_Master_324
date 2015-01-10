@@ -23,7 +23,7 @@
 #define SOFT_SWITCH_CS    1
 #define SOFT_SWITCH_LOAD    2
 
-#define SOFT_DAC_LOAD       3 // 
+#define SOFT_DAC_LOAD       3 
 #define SOFT_DAC_CS       4
 
 #define SOFT_SCK      5

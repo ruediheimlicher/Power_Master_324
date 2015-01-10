@@ -107,6 +107,7 @@ void spi_master_init (void)
    SPCR0 |= (1<<SPE0); // Enable SPI
    status = SPSR0;								//Status loeschen
    SPI_DDR |= (1<<(SPI_CS_ADC));
+   
 }
 
 void spi_master_restore(void)
@@ -258,6 +259,7 @@ uint8_t set_SR(uint8_t outData)
    SWITCH_CS_LO;
    _delay_us(1);
    SPDR0 = outData;
+   spiwaitcounter=0;
    while(!(SPSR0 & (1<<SPIF0)) )//&& spiwaitcounter < WHILEMAX)
    {
       spiwaitcounter++;

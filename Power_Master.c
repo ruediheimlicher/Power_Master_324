@@ -97,7 +97,8 @@ volatile uint16_t rot_eingang_plus=0x00;
 //volatile uint16_t rot_eingang_A=0x00;
 volatile uint16_t rot_count_A=0x00;
 volatile uint16_t rot_loopcount_L=0x00;
-volatile uint16_t rot_loopcount_H=0x0000;
+volatile uint16_t rot_loopcountA_H=0x0000;
+volatile uint16_t rot_loopcountB_H=0x0000;
 volatile uint16_t rot_control=0x0000;
 volatile uint8_t old_rot_pin=1;
 volatile uint8_t new_rot_pin=1;
@@ -333,12 +334,12 @@ ISR(PCINT3_vect)
    if (rot_pin1 == 0)
    {
       rot_control++;
-      if (rot_loopcount_H  > 0x08)
+      if (rot_loopcountA_H  > 0x08)
       {
          delta=0x02;
           //deltaA = 0x08;
       }
-      rot_loopcount_H=0;
+      rot_loopcountA_H=0;
    }
    //deltaA = 10;
    
@@ -385,31 +386,16 @@ ISR(INT0_vect)
 {
    //rot_eingang0++;
    OSZI_A_LO;
-   
-   //uint8_t rot_pin0 = ROTARY_PIN & 0x04; // Interrupt-Eingang
    uint8_t rot_pin1 = (ROTARY_PIN & (1<<ROTARY_A_PIN1)); // Sense Eingang A
    
-  // new_rot_pin = ROTARY_PIN & 0x02;
-   
-  // akt_rot_pin = new_rot_pin ^ old_rot_pin;
-   
    uint16_t delta=0x2F;
-   //uint16_t deltaA=0x80;
    
-  // if (rot_pin1 == 0)
+   rot_control++;
+   if (rot_loopcountA_H  > 0x08)
    {
-      rot_control++;
-      if (rot_loopcount_H  > 0x08)
-      {
-         delta=0x02;
-         //deltaA = 0x08;
-         
-      }
-      rot_loopcount_H=0;
+      delta=0x02;
    }
-   //rot_control = rot_loopcount_H;
-   //deltaA = 10;
-   
+   rot_loopcountA_H=0;
    
    if ( (rot_pin1 == 0))
    {
@@ -421,24 +407,64 @@ ISR(INT0_vect)
       {
          soll_spannung = 0x0FFF;
       }
-      
    }
    else
    {
-      if (soll_spannung > ROTARY_MIN + delta) // noch genuegend?
+      if (soll_spannung > ROTARY_A_MIN + delta) // noch genuegend?
       {
          soll_spannung -= delta;
       }
       else
       {
-         soll_spannung = ROTARY_MIN;
+         soll_spannung = ROTARY_A_MIN;
       }
    }
-   
    // soll_spannung an Teensy
    spi_txbuffer[2] =  (soll_spannung & 0x00FF);
    spi_txbuffer[3] = ((soll_spannung & 0xFF00)>>8);
+   OSZI_A_HI;
+}
+
+ISR(INT1_vect)
+{
+   //rot_eingang0++;
+   OSZI_A_LO;
+   uint8_t rot_pin1 = (ROTARY_PIN & (1<<ROTARY_B_PIN1)); // Sense Eingang A
    
+   uint16_t delta=0x2F;
+   
+   rot_control++;
+   if (rot_loopcountB_H  > 0x08)
+   {
+      delta=0x02;
+   }
+   rot_loopcountB_H=0;
+   
+   if ( (rot_pin1 == 0))
+   {
+      if (0x0FFF - soll_strom > delta) // noch nicht auf Max?
+      {
+         soll_strom += delta;
+      }
+      else
+      {
+         soll_strom = 0x0FFF;
+      }
+   }
+   else
+   {
+      if (soll_strom > ROTARY_B_MIN + delta) // noch genuegend?
+      {
+         soll_strom -= delta;
+      }
+      else
+      {
+         soll_strom = ROTARY_B_MIN;
+      }
+   }
+   // soll_spannung an Teensy
+//   spi_txbuffer[2] =  (soll_strom & 0x00FF);
+//   spi_txbuffer[3] = ((soll_strom & 0xFF00)>>8);
    OSZI_A_HI;
 }
 
@@ -478,10 +504,15 @@ ISR (TIMER0_OVF_vect)
       updateOK |= (1<<UPDATE_MEAS);
       rot_loopcount_L = 0;
       
-      if (rot_loopcount_H < ROT_HI) // hochzaehlen bis max
+      if (rot_loopcountA_H < ROT_HI) // hochzaehlen bis max
       {
-         rot_loopcount_H ++;
+         rot_loopcountA_H ++;
       }
+      if (rot_loopcountB_H < ROT_HI) // hochzaehlen bis max
+      {
+         rot_loopcountB_H ++;
+      }
+
    }
    
    disp_loopcount_L++;
@@ -493,6 +524,29 @@ ISR (TIMER0_OVF_vect)
 
    
 }
+
+void timer1(void)
+{
+   DDRD = 0x30;                      // Set Port D4 and d5 as Output
+   
+   TCCR1A = (1<<WGM10)|(1<<COM1A1)   // Set up the two Control registers of Timer1.
+   |(1<<COM1B1);                      // Wave Form Generation is Fast PWM 8 Bit,
+   TCCR1B = (1<<WGM12)|(1<<CS12)     // OC1A and OC1B are cleared on compare match
+   |(1<<CS10);                      // and set at BOTTOM. Clock Prescaler is 1024.
+   
+   OCR1A = 63;                       // Dutycycle of OC1A = 25%
+   OCR1B = 127;                      // Dutycycle of OC1B = 50%
+
+}
+
+//Interrupt TIMER1 (aller 1msek.)
+ISR (TIMER1_COMPA_vect)
+{
+   //
+   
+   
+}
+
 
 // the control loop changes the dac:
 static void control_loop(void)

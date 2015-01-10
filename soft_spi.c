@@ -36,11 +36,11 @@ void dac_init(void)
    SOFT_SPI_PORT |= (1<<SOFT_DAC_LOAD); // HI
 
    SOFT_SPI_DDR |= (1<<SOFT_SWITCH_LOAD); // Ausgang fuer LOAD SWITCH
-   SOFT_SPI_PORT |= (1<<SOFT_SWITCH_LOAD); // HI
+   SOFT_SPI_PORT |= (1<<SOFT_SWITCH_LOAD);
    
    SOFT_SPI_DDR |= (1<<SOFT_SWITCH_CS); // Ausgang fuer CS SWITCH
    SOFT_SPI_PORT |= (1<<SOFT_SWITCH_CS); // HI
-   
+  
    DDRA |= (1<<0);
    PORTA |= (1<<0);
    

@@ -33,7 +33,8 @@
 
 
 
-#define ROTARY_MIN             200
+#define ROTARY_A_MIN            200 // Spannung
+#define ROTARY_B_MIN             100 // Strom
 
 // admin
 #define ADMIN_PORT          PORTA
