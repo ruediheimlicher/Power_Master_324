@@ -99,3 +99,18 @@ uint8_t DS18X20_frac_bits_decimal(uint8_t cel_frac_bits)
         return(d/10);
 }
 
+unsigned int hex2BCD(uint16_t inValue)
+{
+   //unsigned int uiValue = 0x202;
+   unsigned int outResult = 0;
+   
+   while (inValue > 0)
+   {
+      outResult <<= 4;
+      outResult |= inValue % 10;
+      inValue /= 10;
+   }
+   return outResult;
+}
+
+

@@ -18,18 +18,18 @@
 //#define DAC_PORT  PORTC
 //#define DAC_DDR   DDRC
 
+//#define SOFT_SWITCH_SS     1
+
+//#define SOFT_SWITCH_CS     1
+//#define SOFT_SWITCH_LOAD   2
+
+#define SOFT_DAC_LOAD      3 //
+#define SOFT_DAC_CS        4
 
 
-#define SOFT_SWITCH_CS    1
-#define SOFT_SWITCH_LOAD    2
-
-#define SOFT_DAC_LOAD       3 
-#define SOFT_DAC_CS       4
-
-#define SOFT_SCK      5
-#define SOFT_MOSI     6
-#define SOFT_MISO     7
-
+#define SOFT_MOSI          5
+#define SOFT_MISO          6
+#define SOFT_SCK           7
 
 
 
@@ -51,11 +51,7 @@
 #define DAC_CS_HI        SOFT_SPI_PORT |= (1<<SOFT_DAC_CS)
 #define DAC_CS_LO        SOFT_SPI_PORT &= ~(1<<SOFT_DAC_CS)
 
-#define SWITCH_LOAD_HI        SOFT_SPI_PORT |= (1<<SOFT_SWITCH_LOAD)
-#define SWITCH_LOAD_LO        SOFT_SPI_PORT &= ~(1<<SOFT_SWITCH_LOAD)
 
-#define SWITCH_CS_HI        SOFT_SPI_PORT |= (1<<SOFT_SWITCH_CS)
-#define SWITCH_CS_LO        SOFT_SPI_PORT &= ~(1<<SOFT_SWITCH_CS)
 
 
 #define SCL_HI       SOFT_SPI_PORT |= (1<<SOFT_SCK)

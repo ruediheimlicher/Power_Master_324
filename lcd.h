@@ -1,45 +1,45 @@
 /*
-    File:       lcd.h
-    Version:    0.1.0
-    Date:       Feb. 25, 2006
-    
-    C header file for HD44780 LCD module using a 74HCT164 serial in, parallel 
-    out out shift register to operate the LCD in 8-bit mode.  Example schematic
-    usuing a Powertip PC-1202A LCD available at http://www.micahcarrick.com
-    
-    Uses the avr-libc library for gcc (avr-gcc).
-    
-    ****************************************************************************
-    Copyright (C) 2006 Micah Carrick   <email@micahcarrick.com>
-
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
-
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
-
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-    ****************************************************************************
-*/
+ File:       lcd.h
+ Version:    0.1.0
+ Date:       Feb. 25, 2006
+ 
+ C header file for HD44780 LCD module using a 74HCT164 serial in, parallel
+ out out shift register to operate the LCD in 8-bit mode.  Example schematic
+ usuing a Powertip PC-1202A LCD available at http://www.micahcarrick.com
+ 
+ Uses the avr-libc library for gcc (avr-gcc).
+ 
+ ****************************************************************************
+ Copyright (C) 2006 Micah Carrick   <email@micahcarrick.com>
+ 
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ 
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+ 
+ You should have received a copy of the GNU General Public License
+ along with this program; if not, write to the Free Software
+ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ ****************************************************************************
+ */
 #ifndef _LCD_H
 #define _LCD_H
 
 #include <inttypes.h>
 
 /* AVR port and pins connected to '164 and/or LCD */
-#define LCD_PORT                PORTD
-#define LCD_DDR						DDRD
+#define LCD_PORT                PORTA
+#define LCD_DDR						DDRA
 
 
-#define LCD_RSDS_PIN            5
+#define LCD_RSDS_PIN            7
 #define LCD_ENABLE_PIN          6
-#define LCD_CLOCK_PIN           7
+#define LCD_CLOCK_PIN           5
 
 #define LCD_STROBEDELAY  2
 
@@ -64,18 +64,22 @@
 #define LCD_CMD_SHIFT_LEFT      0x18    /* shift (left) */
 #define LCD_CMD_SHIFT_RIGHT     0x1C    /* shift (right)*/
 
-#define LCD_LINE_1              0x80 /* bit 7 is always set: 0x80 = 0x00 */ 
-#define LCD_LINE_2              0xC0 /* 2nd line at position 40 */ 
+#define LCD_LINE_1              0x80 /* bit 7 is always set: 0x80 = 0x00 */
+#define LCD_LINE_2              0xC0 /* 2nd line at position 40 */
 
 /* function set: (always 8-bit with the shift-register circuit I'm using */
 #define LCD_FUNCTION_8x1        0x30   /* 5x7 characters, single line display */
 #define LCD_FUNCTION_8x2        0x38   /* 5x7 characters, 2 line display */
 
 //Fleury
-#define LCD_LINES           2     /**< number of visible lines of the display */
+#define LCD_LINES           4    /**< number of visible lines of the display */
 #define LCD_DISP_LENGTH    20     /**< visibles characters per line of the display */
 #define LCD_START_LINE1  0x00     /**< DDRAM address of first char of line 1 */
 #define LCD_START_LINE2  0x40     /**< DDRAM address of first char of line 2 */
+#define LCD_START_LINE3  0x14     /**< DDRAM address of first char of line 3 */
+#define LCD_START_LINE4  0x54     /**< DDRAM address of first char of line 4 */
+
+
 #define LCD_CGRAM             6      /* DB6: set CG RAM address             */
 #define LCD_DDRAM             7      /* DB7: set DD RAM address             */
 
@@ -93,8 +97,8 @@ volatile uint8_t lcd_status=0;
 #define OSZIPORT           PORTA
 #define OSZIPORTDDR        DDRA
 #define OSZIPORTPIN        PINA
-#define OSZI_PULS_A        0
-#define OSZI_PULS_B        1
+#define OSZI_PULS_A        1
+#define OSZI_PULS_B        2
 
 #define OSZI_A_LO OSZIPORT &= ~(1<<OSZI_PULS_A)
 #define OSZI_A_HI OSZIPORT |= (1<<OSZI_PULS_A)

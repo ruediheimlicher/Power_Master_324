@@ -25,6 +25,23 @@
 
 
 
+// Schieberegister HC595
+
+#define SPI_SR_PORT     PORTB
+#define SPI_SR_PIN      PINB
+#define SPI_SR_DDR      DDRB
+
+// Strom-Shunt
+#define SRA_CS          0
+
+#define SRA_CS_HI        SPI_SR_PORT |= (1<<SRA_CS)
+#define SRA_CS_LO        SPI_SR_PORT &= ~(1<<SRA_CS)
+
+// 7-Seg-Anzeige
+#define SRB_CS          1
+
+#define SRB_CS_HI        SPI_SR_PORT |= (1<<SRB_CS)
+#define SRB_CS_LO        SPI_SR_PORT &= ~(1<<SRB_CS)
 
 
 volatile uint8_t spi_rxbuffer[SPI_BUFFERSIZE];

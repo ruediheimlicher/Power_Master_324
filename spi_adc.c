@@ -20,12 +20,12 @@ void MCP3208_spiDelay(unsigned int NOPcount)
 void spi_adc_restore()
 {
    //SPCR0=0;
- //  SPI_PORT |= (1<<(SPI_CS_ADC));    //setbitHigh CS   Pin
-//   SPI_PORT |= (1<<(SPI_MOSI_PIN));  //setbitHigh MOSI Pin
-//   SPI_PORT |= (1<<(SPI_MISO_PIN));  //setbitHigh MOSI Pin
+   //  SPI_PORT |= (1<<(SPI_CS_ADC));    //setbitHigh CS   Pin
+   //   SPI_PORT |= (1<<(SPI_MOSI_PIN));  //setbitHigh MOSI Pin
+   //   SPI_PORT |= (1<<(SPI_MISO_PIN));  //setbitHigh MOSI Pin
    SPI_PORT &= ~(1<<(SPI_SCK_PIN));   //setbitHigh CLK  Pin
    SPCR0 &= ~(1<<CPOL0)|(1<<CPHA0);    //|(0<<SPR0);
-//   SPI_PORT &= ~(1<<(SPI_CS_ADC));    //setbitHigh CS   Pin
+   //   SPI_PORT &= ~(1<<(SPI_CS_ADC));    //setbitHigh CS   Pin
    
 }
 
@@ -41,7 +41,7 @@ void MCP3208_spi_Init(void)
    
    SPCR0 = (1<<SPE0)|(1<<MSTR0);
    
-//   SPCR0 |= (1<<CPOL0)|(1<<CPHA0);
+   //   SPCR0 |= (1<<CPOL0)|(1<<CPHA0);
    
    SPCR0 |= (1<<SPR00); // f/16
    //SPCR |= (1<<SPR1); // f/64

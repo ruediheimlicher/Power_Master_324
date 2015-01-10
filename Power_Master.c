@@ -22,7 +22,7 @@
 
 #include "soft_spi.c"
 #include "spi_adc.c"
- 
+
 
 #include "utils.c"
 #include "slaves.c"
@@ -135,6 +135,8 @@ volatile uint8_t teensycode = 0;
 // Schalter
 volatile uint8_t switch_in = 0;
 volatile uint8_t switch_out = 0;
+volatile uint8_t strom_mult = 1;
+volatile uint8_t strom_kanal = 0;
 
 // var fuer soft-spi
 volatile uint8_t out_H=0;
@@ -146,14 +148,14 @@ volatile uint8_t in_L=0;
 
 //volatile uint8_t out[8] = {'H','e','l','l','o',' ',' ',' '};
 volatile uint8_t out[8][8] ={
-{'H','a','l','l','o',' ',' ',' '},
-{'W','i','r',' ',' ',' ',' ',' '},
-{'g','e','h','e','n',' ',' ',' '},
-{'a','u','f',' ','d','e','n',' '},
-{'B','a','c','h','t','e','l',' '},
-{'u','n','d',' ','a','u','c','h'},
-{'a','u','f',' ','d','e','n',' '},
-{'T','u','r','m',' ',' ',' ','*'}};
+   {'H','a','l','l','o',' ',' ',' '},
+   {'W','i','r',' ',' ',' ',' ',' '},
+   {'g','e','h','e','n',' ',' ',' '},
+   {'a','u','f',' ','d','e','n',' '},
+   {'B','a','c','h','t','e','l',' '},
+   {'u','n','d',' ','a','u','c','h'},
+   {'a','u','f',' ','d','e','n',' '},
+   {'T','u','r','m',' ',' ',' ','*'}};
 
 
 
@@ -163,17 +165,33 @@ static int16_t measured_val[2]={0,0};
 static int16_t set_val[2];
 
 
+// BCD
+
+uint8_t BCD_Array[4]={};
+
 void delay_ms(unsigned int ms)
 /* delay for a minimum of <ms> */
 {
-	// we use a calibrated macro. This is more
-	// accurate and not so much compiler dependent
-	// as self made code.
-	while(ms)
+   // we use a calibrated macro. This is more
+   // accurate and not so much compiler dependent
+   // as self made code.
+   while(ms)
    {
-		_delay_ms(0.96);
-		ms--;
-	}
+      _delay_ms(0.96);
+      ms--;
+   }
+}
+
+
+void update_BCD_Array(uint8_t* bcdarray, uint16_t inValue)
+{
+   uint8_t index=0;
+   for (index=0; index<4; index++)
+   {
+      bcdarray[index] = inValue % 10;
+      inValue /= 10;
+   }
+   
 }
 
 // TWI
@@ -183,34 +201,34 @@ void delay_ms(unsigned int ms)
 //#define DEF_BAUDRATE    9600
 //#define F_CPU           16000000
 /*
-// funktionen zur ser. Datenausgabe
-void init_serio0(void)
-{
-   uint8_t temp;
-   UCSR0B = 0x0;                               // alles abschalten
-   UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);         // default wie nach reset 8 Bit, async, no par.
-  //UBRR0=((F_CPU/16L/(DEF_BAUDRATE/10L)+5L)/10L) - 1;    // passend gerundet
-   UBRR0=((F_CPU/16L/(DEF_BAUDRATE/10L)+5L)/10L) - 1;    // passend gerundet
-   UCSR0B |= (1<<RXEN0) | (1<<TXEN0);          // RX + TX freigeben
-   temp = UDR0;
-}
-
-void ser_putchar(char c)
-{
-   while(!(UCSR0A & (1<<UDRE0)));
-   UDR0 = c;
-}
-
-void ser_string(char *s)
-{
-   while(*s) ser_putchar(*s++);
-   ser_putchar(13);
-   ser_putchar(10);
-}
+ // funktionen zur ser. Datenausgabe
+ void init_serio0(void)
+ {
+ uint8_t temp;
+ UCSR0B = 0x0;                               // alles abschalten
+ UCSR0C = (1<<UCSZ01) | (1<<UCSZ00);         // default wie nach reset 8 Bit, async, no par.
+ //UBRR0=((F_CPU/16L/(DEF_BAUDRATE/10L)+5L)/10L) - 1;    // passend gerundet
+ UBRR0=((F_CPU/16L/(DEF_BAUDRATE/10L)+5L)/10L) - 1;    // passend gerundet
+ UCSR0B |= (1<<RXEN0) | (1<<TXEN0);          // RX + TX freigeben
+ temp = UDR0;
+ }
+ 
+ void ser_putchar(char c)
+ {
+ while(!(UCSR0A & (1<<UDRE0)));
+ UDR0 = c;
+ }
+ 
+ void ser_string(char *s)
+ {
+ while(*s) ser_putchar(*s++);
+ ser_putchar(13);
+ ser_putchar(10);
+ }
  
  // ausgeben
  ser_string(ergebnis_str);               // und per UART ausgeben
-*/
+ */
 
 
 
@@ -223,71 +241,80 @@ void device_init(void)
    //LOOPLED_PIN	4
    
    
-	//LCD
-	/* INITIALIZE */
-	LCD_DDR |=(1<<LCD_RSDS_PIN);
-	LCD_DDR |=(1<<LCD_ENABLE_PIN);
-	LCD_DDR |=(1<<LCD_CLOCK_PIN);
+   //LCD
+   /* INITIALIZE */
+   LCD_DDR |=(1<<LCD_RSDS_PIN);
+   LCD_DDR |=(1<<LCD_ENABLE_PIN);
+   LCD_DDR |=(1<<LCD_CLOCK_PIN);
    
    OSZIPORTDDR |= (1<<OSZI_PULS_A);	//Pin 0 von  als Ausgang fuer LED TWI
    OSZIPORT |= (1<<OSZI_PULS_A);		// HI
-	
+   
    OSZIPORTDDR |= (1<<OSZI_PULS_B);		//Pin 1 von  als Ausgang fuer LED TWI
    OSZIPORT |= (1<<OSZI_PULS_B);		//Pin   von   als Ausgang fuer OSZI
-	
+   
    SWITCH_DDR &= ~(1<< SWITCH_0); // Eingang Switch Bit 0
    SWITCH_DDR &= ~(1<< SWITCH_1); // Eingang Switch Bit 1
    SWITCH_DDR &= ~(1<< SWITCH_2); // Eingang Switch Bit 2
-
+   
    SWITCH_PORT  |= (1<< SWITCH_0); // Eingang Switch Bit 0
    SWITCH_PORT  |= (1<< SWITCH_1); // Eingang Switch Bit 1
    SWITCH_PORT  |= (1<< SWITCH_2); // Eingang Switch Bit 2
-
+   
+   
+   // Schieberegister Strom-Shunt
+   SPI_SR_DDR |= (1<< SRA_CS); // Ausgang CS
+   SPI_SR_PORT |= (1<< SRA_CS); // HI
+   
+   // Schieberegister 7-Seg-Anzeige
+   SPI_SR_DDR |= (1<< SRB_CS);
+   SPI_SR_PORT |= (1<< SRB_CS); // HI
+   
    
    ADMIN_DDR &= ~(1<< TEENSY_DETECTED); // Eingang fuer Anmeldung Teensy
-   ADMIN_PORT &= ~(1<< TEENSY_DETECTED); //LO
- //  ADMIN_DDR |= (1<< TEENSY_LED); // Ausgang fuer Anzeige Teensy present
- //  ADMIN_PORT &= ~(1<< TEENSY_LED); //LO
-  
+   ADMIN_PORT |= (1<< TEENSY_DETECTED); //HI
+   //  ADMIN_DDR |= (1<< TEENSY_LED); // Ausgang fuer Anzeige Teensy present
+   //  ADMIN_PORT &= ~(1<< TEENSY_LED); //LO
+   
    /*
-   // TWI vorbereiten
-	TWI_DDR |= (1<<SDA_PIN);//Bit 4 von PORT C als Ausgang für SDA
-	TWI_PORT |= (1<<SDA_PIN); // HI
-	
-	TWI_DDR |= (1<<SCL_PIN);//Bit 5 von PORT C als Ausgang für SCL
-	TWI_PORT |= (1<<SCL_PIN); // HI
-   */
+    // TWI vorbereiten
+    TWI_DDR |= (1<<SDA_PIN);//Bit 4 von PORT C als Ausgang für SDA
+    TWI_PORT |= (1<<SDA_PIN); // HI
+    
+    TWI_DDR |= (1<<SCL_PIN);//Bit 5 von PORT C als Ausgang für SCL
+    TWI_PORT |= (1<<SCL_PIN); // HI
+    */
    
    
    
    
    
    //
-   SOFT_SPI_DDR |= (1<<SOFT_SWITCH_LOAD); // Ausgang fuer LOAD SWITCH
-   SOFT_SPI_PORT |= (1<<SOFT_SWITCH_LOAD); // HI
+   //   SOFT_SPI_DDR |= (1<<SOFT_SWITCH_LOAD); // Ausgang fuer LOAD SWITCH
+   //   SOFT_SPI_PORT |= (1<<SOFT_SWITCH_LOAD); // HI
    
-   SOFT_SPI_DDR |= (1<<SOFT_SWITCH_CS); // Ausgang fuer CS SWITCH
-   SOFT_SPI_PORT |= (1<<SOFT_SWITCH_CS); // HI
-
+   //   SOFT_SPI_DDR |= (1<<SOFT_SWITCH_CS); // Ausgang fuer CS SWITCH
+   //  SOFT_SPI_PORT |= (1<<SOFT_SWITCH_CS); // HI
+   
 }
 
 void rotary_init(void)
 {
    /*
-   ROTARY_DDR &= ~(1<<ROTARY_A_PIN0);   // Eingang 0
-   ROTARY_PORT |= (1<<ROTARY_A_PIN0); // HI
-   ROTARY_DDR &= ~(1<<ROTARY_A_PIN1); //Eingang 1
-   ROTARY_PORT |= (1<<ROTARY_A_PIN1);
-   
-  
-   // PCINT16/RXD PD0
-   PCICR |= (1<<PCIE3);
-  
-   PCIFR |= (1<<PCIF3);
-   
-   PCMSK3|= (1<<PCINT24);
-   //PCMSK2|= (1<<PCINT17);
-   */
+    ROTARY_DDR &= ~(1<<ROTARY_A_PIN0);   // Eingang 0
+    ROTARY_PORT |= (1<<ROTARY_A_PIN0); // HI
+    ROTARY_DDR &= ~(1<<ROTARY_A_PIN1); //Eingang 1
+    ROTARY_PORT |= (1<<ROTARY_A_PIN1);
+    
+    
+    // PCINT16/RXD PD0
+    PCICR |= (1<<PCIE3);
+    
+    PCIFR |= (1<<PCIF3);
+    
+    PCMSK3|= (1<<PCINT24);
+    //PCMSK2|= (1<<PCINT17);
+    */
    
    
    
@@ -305,87 +332,87 @@ void rotary_init(void)
    ROTARY_PORT |= (1<<ROTARY_B_PIN0);
    ROTARY_DDR &= ~(1<<ROTARY_B_PIN1);  // Sense-Eingang
    ROTARY_PORT |= (1<<ROTARY_B_PIN1);
-
+   
    /*
-#define ROTARY_A_PIN0         2
-#define ROTARY_A_PIN1          0
-#define ROTARY_B_PIN0         3
-#define ROTARY_B_PIN1          1
-*/
+    #define ROTARY_A_PIN0         2
+    #define ROTARY_A_PIN1          0
+    #define ROTARY_B_PIN0         3
+    #define ROTARY_B_PIN1          1
+    */
 }
 
 
 /*
-ISR(PCINT3_vect)
-{
-   //rot_eingang0++;
-   //OSZI_A_LO;
-   
-   uint8_t rot_pin0 = ROTARY_PIN & 0x01; //Eingang 0
-   uint8_t rot_pin1 = (ROTARY_PIN & 0x02); //Eingang 1
-   
-   new_rot_pin = ROTARY_PIN & 0x02;
-   
-   akt_rot_pin = new_rot_pin ^ old_rot_pin;
-   
-   uint16_t delta=0x2F;
-   //uint16_t deltaA=0x80;
-   
-   if (rot_pin1 == 0)
-   {
-      rot_control++;
-      if (rot_loopcountA_H  > 0x08)
-      {
-         delta=0x02;
-          //deltaA = 0x08;
-      }
-      rot_loopcountA_H=0;
-   }
-   //deltaA = 10;
-   
-   
-   if ((rot_pin0==1) && (rot_pin1 == 0))
-   {
-      if (0x0FFF - soll_spannung > delta)
-      {
-         soll_spannung += delta;
-      }
-      else
-      {
-         soll_spannung = 0x0FFF;
-      }
-      
-   }
-   else if ((rot_pin0==0) && (rot_pin1 == 0))
-   {
-      if (soll_spannung > ROTARY_MIN + delta)
-      {
-         soll_spannung -= delta;
-         
-      }
-      else
-      {
-         soll_spannung = ROTARY_MIN;
-      }
-   }
-   
-   
-   
-   
-  // soll_spannung = rot_eingang_A;
-   spi_txbuffer[2] =  (soll_spannung & 0x00FF);
-   spi_txbuffer[3] = ((soll_spannung & 0xFF00)>>8);
-   
-  // OSZI_A_HI;
-}
-*/
+ ISR(PCINT3_vect)
+ {
+ //rot_eingang0++;
+ //OSZI_A_LO;
+ 
+ uint8_t rot_pin0 = ROTARY_PIN & 0x01; //Eingang 0
+ uint8_t rot_pin1 = (ROTARY_PIN & 0x02); //Eingang 1
+ 
+ new_rot_pin = ROTARY_PIN & 0x02;
+ 
+ akt_rot_pin = new_rot_pin ^ old_rot_pin;
+ 
+ uint16_t delta=0x2F;
+ //uint16_t deltaA=0x80;
+ 
+ if (rot_pin1 == 0)
+ {
+ rot_control++;
+ if (rot_loopcountA_H  > 0x08)
+ {
+ delta=0x02;
+ //deltaA = 0x08;
+ }
+ rot_loopcountA_H=0;
+ }
+ //deltaA = 10;
+ 
+ 
+ if ((rot_pin0==1) && (rot_pin1 == 0))
+ {
+ if (0x0FFF - soll_spannung > delta)
+ {
+ soll_spannung += delta;
+ }
+ else
+ {
+ soll_spannung = 0x0FFF;
+ }
+ 
+ }
+ else if ((rot_pin0==0) && (rot_pin1 == 0))
+ {
+ if (soll_spannung > ROTARY_MIN + delta)
+ {
+ soll_spannung -= delta;
+ 
+ }
+ else
+ {
+ soll_spannung = ROTARY_MIN;
+ }
+ }
+ 
+ 
+ 
+ 
+ // soll_spannung = rot_eingang_A;
+ spi_txbuffer[2] =  (soll_spannung & 0x00FF);
+ spi_txbuffer[3] = ((soll_spannung & 0xFF00)>>8);
+ 
+ // OSZI_A_HI;
+ }
+ */
 
 
 
 ISR(INT0_vect)
 {
    //rot_eingang0++;
-   OSZI_A_LO;
+   //   OSZI_A_LO;
    uint8_t rot_pin1 = (ROTARY_PIN & (1<<ROTARY_A_PIN1)); // Sense Eingang A
    
    uint16_t delta=0x2F;
@@ -422,13 +449,13 @@ ISR(INT0_vect)
    // soll_spannung an Teensy
    spi_txbuffer[2] =  (soll_spannung & 0x00FF);
    spi_txbuffer[3] = ((soll_spannung & 0xFF00)>>8);
-   OSZI_A_HI;
+   //   OSZI_A_HI;
 }
 
 ISR(INT1_vect)
 {
    //rot_eingang0++;
-   OSZI_A_LO;
+   //   OSZI_A_LO;
    uint8_t rot_pin1 = (ROTARY_PIN & (1<<ROTARY_B_PIN1)); // Sense Eingang A
    
    uint16_t delta=0x2F;
@@ -459,13 +486,13 @@ ISR(INT1_vect)
       }
       else
       {
-         soll_strom = ROTARY_B_MIN;
+         soll_strom = ROTARY_A_MIN;
       }
    }
    // soll_spannung an Teensy
-//   spi_txbuffer[2] =  (soll_strom & 0x00FF);
-//   spi_txbuffer[3] = ((soll_strom & 0xFF00)>>8);
-   OSZI_A_HI;
+   //   spi_txbuffer[2] =  (soll_strom & 0x00FF);
+   //   spi_txbuffer[3] = ((soll_strom & 0xFF00)>>8);
+   //   OSZI_A_HI;
 }
 
 
@@ -489,15 +516,15 @@ void timer0 (void) // Grundtakt fuer Stoppuhren usw.
    //TIFR |= (1<<TOV0);		//Clear TOV0 Timer/Counter Overflow Flag. clear pending interrupts
    TIMSK0 |= (1<<TOIE0);	//Overflow Interrupt aktivieren
    TCNT0 = 0;					//Rücksetzen des Timers
-
-    }
+   
+}
 
 #pragma mark TIMER0_OVF
 ISR (TIMER0_OVF_vect)
 {
    rot_loopcount_L++;
    //OSZI_B_TOGG;
-    if (rot_loopcount_L >= UPDATE_COUNT)
+   if (rot_loopcount_L >= UPDATE_COUNT)
    {
       //OSZI_A_TOGG;
       //updateOK =1;
@@ -512,7 +539,7 @@ ISR (TIMER0_OVF_vect)
       {
          rot_loopcountB_H ++;
       }
-
+      
    }
    
    disp_loopcount_L++;
@@ -521,22 +548,25 @@ ISR (TIMER0_OVF_vect)
       updateOK |= (1<<UPDATE_DISP);
       disp_loopcount_L=0;
    }
-
+   
    
 }
 
 void timer1(void)
 {
-   DDRD = 0x30;                      // Set Port D4 and d5 as Output
+   DDRD = 0x30;                      // Set Port D4 and D5 as Output
    
-   TCCR1A = (1<<WGM10)|(1<<COM1A1)   // Set up the two Control registers of Timer1.
-   |(1<<COM1B1);                      // Wave Form Generation is Fast PWM 8 Bit,
-   TCCR1B = (1<<WGM12)|(1<<CS12)     // OC1A and OC1B are cleared on compare match
-   |(1<<CS10);                      // and set at BOTTOM. Clock Prescaler is 1024.
+   TCCR1A |= (1<<WGM11); //
+   TCCR1A |= (1<<COM1A1) |(1<<COM1B1);   // Set up the two Control registers of Timer1.
+   // Wave Form Generation is Fast PWM 8 Bit,
+   TCCR1B = (1<<WGM12)|(1<<WGM13);                   // OC1A and OC1B are cleared on compare match
+   TCCR1B |= (1<<CS11);//|(1<<CS10);                      // and set at BOTTOM. Clock Prescaler is 64.
    
-   OCR1A = 63;                       // Dutycycle of OC1A = 25%
-   OCR1B = 127;                      // Dutycycle of OC1B = 50%
-
+   OCR1A = ist_strom;                       // Dutycycle of OC1A
+   OCR1B = ist_spannung>>3;                      // Dutycycle of OC1B
+   ICR1H = 0x0F;
+   ICR1L = 0xFF;
+   
 }
 
 //Interrupt TIMER1 (aller 1msek.)
@@ -575,8 +605,8 @@ static void control_loop(void)
       currentcontrol=10; // I control
       if (TEST)
       {
-      lcd_gotoxy(19,0);
-      lcd_putc('I');
+         lcd_gotoxy(19,0);
+         lcd_putc('I');
       }
       
       
@@ -615,9 +645,9 @@ static void control_loop(void)
    { // avoid LSB bouncing if we are close
       tmp=0;
    }
-//   lcd_gotoxy(9,0);
-//   lcd_putsignedint(tmp);
-
+   //   lcd_gotoxy(9,0);
+   //   lcd_putsignedint(tmp);
+   
    //LEDOFF0;
    if (tmp==0) return; // nothing to change
    
@@ -637,7 +667,7 @@ static void control_loop(void)
    }
    //lcd_gotoxy(0,1);
    //lcd_putsignedint(tmp);
-
+   
    dac_val+=tmp;
    
    if (dac_val>0x0FFF)
@@ -648,9 +678,9 @@ static void control_loop(void)
    {  // the output is zero below 400 due to transistor threshold
       dac_val=200;
    }
- //  lcd_gotoxy(14,1);
- //  lcd_putint12(dac_val);
-
+   //  lcd_gotoxy(14,1);
+   //  lcd_putint12(dac_val);
+   
    setDAC7612(dac_val); // hier ODER in main!
    
    
@@ -674,23 +704,23 @@ int main (void)
    wdt_reset();
    WDTCSR |= (1<<WDCE) | (1<<WDE);
    WDTCSR = 0x00;
-
+   
    // Fuses: h: D9	l: EF  JTAG OFF
-	device_init();
-	
-	lcd_initialize(LCD_FUNCTION_8x2, LCD_CMD_ENTRY_INC, LCD_CMD_ON);
-	lcd_puts("Guten Tag\0");
-	_delay_ms(1000);
-	lcd_cls();
-	lcd_puts("READY\0");
-	
-	_delay_ms(1000);
+   device_init();
+   
+   lcd_initialize(LCD_FUNCTION_8x2, LCD_CMD_ENTRY_INC, LCD_CMD_ON);
+   lcd_puts("Guten Tag\0");
+   _delay_ms(1000);
    lcd_cls();
-	uint8_t i=0;
+   lcd_puts("READY\0");
+   
+   _delay_ms(1000);
+   lcd_cls();
+   uint8_t i=0;
    
    rotary_init();
    sei();
-  // i2c_init();
+   // i2c_init();
    spi_master_init();
    
    dac_init();
@@ -698,21 +728,21 @@ int main (void)
    uint16_t spiloop =0;
    uint8_t twiloop=0;
    uint8_t errloop=0;
-
+   
    
    //DDRB |=(1<<0);
    device_init();
    initADC();
    
-//   spi_txbuffer[0]= '$';
+   //   spi_txbuffer[0]= '$';
    uint8_t k=0;
    for (k=0;k<SPI_BUFFERSIZE;k++)
    {
       spi_txbuffer[k]= 0x00;
       spi_rxbuffer[k]= 0x00;
    }
-
-//   volatile uint16_t U_I_Array[4];
+   
+   //   volatile uint16_t U_I_Array[4];
    
    timer0();
    sei();
@@ -725,30 +755,33 @@ int main (void)
    //lcd_putsignedint(-12);
    soll_strom = 800;
    
-   uint16_t teststrom = 0;
-   uint16_t teststrom_mittel[4]={};
+   
+   timer1();
+   
+   
+   uint16_t strom_mittel[8]={};
    uint8_t stromschleifecounter=0;
 #pragma mark while
-	while (1)
-	{
-		//OSZI_A_TOGG;
+   while (1)
+   {
+      //OSZI_A_TOGG;
       
       // Teensy angeschlossen?
       
       if (ADMIN_PIN & (1<<TEENSY_DETECTED))// || OHNE_TEENSY) // TEENSY_DETECT ist activ LO!!!
       {
          //spistatus |= (1<< TEENSY_RECV);
-        spistatus &= ~(1<< TEENSY_RECV);
+         //        spistatus &= ~(1<< TEENSY_RECV);
          //ADMIN_PIN &= ~(1<<TEENSY_LED); // Teensy LED OFF
-               }
+      }
       else
       {
          //spistatus &= ~(1<< TEENSY_RECV);
          spistatus |= (1<< TEENSY_RECV);     // active LO
          //ADMIN_PIN |= (1<<TEENSY_LED); // Teensy LED ON
-
+         
       }
-
+      
       //      if (TEST && (updateOK & (1<<UPDATE_MEAS)))
       {
          //OSZI_A_TOGG;
@@ -764,12 +797,15 @@ int main (void)
             //OSZI_B_HI;
             // if (ADMIN_PIN & (1<<TEENSY_DETECTED))
             
-         //   spistatus |= (1<< TEENSY_RECV);
+            //   spistatus |= (1<< TEENSY_RECV);
             
             if (spistatus & (1<< TEENSY_RECV)) // Teensy ist da, abfragen
             {
-               lcd_gotoxy(19,0);
-               lcd_putc('+');
+               if (TEST)
+               {
+                  lcd_gotoxy(19,0);
+                  lcd_putc('+');
+               }
                //lcd_gotoxy(14,0);
                //lcd_puthex(spi_rxbuffer[0]);
                //OSZI_B_HI;
@@ -780,13 +816,13 @@ int main (void)
                {
                   //spi_txbuffer[0] = 0x81;
                   //spi_txbuffer[1] = 0x81;
-                 // spi_txbuffer[2] = 5;
+                  // spi_txbuffer[2] = 5;
                   //spi_txbuffer[3] = 3;
                }
-
                
-               lcd_gotoxy(16,0);
-               lcd_puthex(spi_rxbuffer[0]);
+               
+               //           lcd_gotoxy(15,0);
+               //           lcd_puthex(spi_rxbuffer[0]);
                //lcd_gotoxy(16,1);
                //lcd_puthex(spi_rxbuffer[1]);
                //lcd_puthex(errloop);
@@ -801,7 +837,7 @@ int main (void)
                   {
                      errloop++;
                      cli();
-                     ext_spannung = (spi_rxbuffer[1] | (spi_rxbuffer[2]<<8));                     
+                     ext_spannung = (spi_rxbuffer[1] | (spi_rxbuffer[2]<<8));
                      soll_spannung = (spi_rxbuffer[1] | (spi_rxbuffer[2]<<8));
                      sei();
                   }break;
@@ -820,30 +856,47 @@ int main (void)
             }
             else
             {
-               lcd_gotoxy(19,0);
-               lcd_putc('-');
+               if (TEST)
+               {
+                  lcd_gotoxy(19,0);
+                  lcd_putc('-');
+               }
                //OSZI_B_HI;
                
             }
             //_delay_us(1);
             _delay_us(1);
-
+            
             //      switch_in = getSwitch(); // 22us
             //      switch_in = get_SR(0);
             //      switch_in = readRaw8Kanal(2);
             
             
             //OSZI_B_LO;
-            switch_in = 7-((SWITCH_PIN & 0x1C)>>2 );
+            
+            // !!! Anschluesse von PORTC vertauscht !!!
+#pragma mark SWITCH
+            switch_in = 7-((SWITCH_PIN & 0x07) );
             lcd_gotoxy(0,0);
+            //lcd_puthex(SWITCH_PIN& 0x07);
             lcd_puthex(switch_in);
+            //lcd_puthex(errloop++);
             
             // Test fuer SR HC595
             
-           
-           
+            
+            
             // Ausgaenge entsprechend Schalterstellung setzen
-            switch_out = 0xFF; // reset der Schalterwerte, alle HI: Messung ueberbruecken
+            
+            // 0: leer
+            // 1: 10A
+            // 2: 100mA
+            // 3: 1A
+            
+            
+            switch_out &= ~0x0E; // reset der Schalterwerte, alle LO (PNP): Messung ueberbruecken
+            
+            strom_mult = 1;
             switch (switch_in)
             {
                case 0x00: // OFF
@@ -851,102 +904,171 @@ int main (void)
                   
                }break;
                   
-               case 0x01: //100mA
+               case 0x01: //50mA
                {
-                  
-                  switch_out &= ~(1<<0);
+                  switch_out |= (1<<2);
+                  strom_mult = 2;
+                  strom_kanal = 1;
+                  soll_strom = 1000;
                   
                }break;
-               case 0x02: //
+               case 0x02: // 100mA
                {
-                  switch_out &= ~(1<<1);
+                  switch_out |= (1<<2);
+                  strom_kanal = 1;
+                  soll_strom = 1000;
                }break;
-               case 0x03: // 300mA
+               case 0x03: // 500mA
                {
-                  switch_out &= ~(1<<2);
+                  switch_out |= (1<<3);
+                  strom_mult = 2;
+                  strom_kanal = 0;
                }break;
                case 0x04: // 1A
                {
-                  
+                  switch_out |= (1<<3);
+                  strom_kanal = 0;
                }break;
-               case 0x05: // 3A
+               case 0x05: // 5A
                {
-                  
+                  switch_out |= (1<<1);
+                  strom_kanal = 2;
+                  strom_mult = 2;
                }break;
                case 0x06: // 10A
                {
-                  
+                  switch_out |= (1<<1);
+                  strom_kanal = 2;
                }break;
+               default:
+               {
+                  strom_mult = 0;
+               }
                   
             }// switch
             //OSZI_B_HI;
             
             //lcd_puthex(switch_out);
+            //lcd_puthex(strom_mult);
+            OSZI_A_LO;
             set_SR(switch_out); //
+            OSZI_A_HI;
             //_delay_us(100);
             //spi_adc_restore();
 #pragma mark ADC
-             
-//            OSZI_A_LO;
+            
+            //            OSZI_A_LO;
             //_delay_us(1);
- //           OSZI_A_HI;
+            //           OSZI_A_HI;
             //_delay_us(1);
             
             //OSZI_B_LO;
             
-  //         setDAC7612(soll_spannung); // hier ODER in Control_loop
+            //      setDAC7612(soll_spannung); // hier ODER in Control_loop
             
             // Spannung messen
             //OSZI_B_HI;
-            ist_spannung= MCP3208_spiRead(SingleEnd,0);
+            ist_spannung= MCP3208_spiRead(SingleEnd,3);
+            OCR1B = ist_spannung;                      // Dutycycle of OC1B // ergibt bei 3 volle Aussteuerung
             //_delay_us(1);
             
+            soll_strom = 2000;
             // Strom messen
-            if (switch_in)
+            if (switch_in) // Ein Bereich gewaehlt
             {
-               uint16_t teststrom = MCP3208_spiRead(SingleEnd,(switch_in)) ;
-               stromschleifecounter &= 0x03;
-               teststrom_mittel[stromschleifecounter] = MCP3208_spiRead(SingleEnd,(switch_in)) ;
-               stromschleifecounter++;
-               uint8_t index=0;
-               teststrom=0;
-               for (index=0;index<4;index++)
+               uint16_t akt_strom = 0xFFF - MCP3208_spiRead(SingleEnd,(strom_kanal)) ;
+               
+               stromschleifecounter &= 0x07;
+               //strom_mittel[stromschleifecounter] = (MCP3208_spiRead(SingleEnd,strom_kanal)) ;
+               switch (strom_mult)
                {
-                  teststrom += (teststrom_mittel[index]);
+                  case 1:
+                  {
+                     if (akt_strom < 0xFFF)
+                     {
+                        //akt_strom *= strom_mult;
+                     }
+                     else // Bereichsuerberschreitung
+                     {
+                        akt_strom=0;
+                        switch_out ^= (1<<7); // bit 7 toggeln,
+                     }
+                    
+                  }break;
+                  case 2:
+                  {
+                     if (akt_strom < 0x800)
+                     {
+                        akt_strom *= strom_mult;
+                     }
+                     else // Bereichsuerberschreitung
+                     {
+                        akt_strom=0;
+                        switch_out ^= (1<<7); // bit 7 toggeln,
+                     }
+
+                     
+                  }break;
+                     
+               } // switch
+               
+               if (TEST)
+               {
+              
+               lcd_gotoxy(0,2);
+               lcd_putc('a');
+               lcd_putint12( akt_strom);
                }
-               teststrom /= 4;
+               strom_mittel[stromschleifecounter] = akt_strom;
+               stromschleifecounter++;
+               
+               
+               
+               uint8_t index=0;
+               uint32_t mittelstrom = 0;
+               for (index=0;index<8;index++)
+               {
+                  mittelstrom += (strom_mittel[index]);
+               }
+               mittelstrom /= 8;
                //         ist_strom =  MCP3208_spiRead(SingleEnd,(switch_out & 0x07)) ;
                
-               lcd_gotoxy(16,1);
-               // lcd_putc('i');
-               lcd_putint12( teststrom);
+               
+               if (TEST)
+               {
+               lcd_gotoxy(12,2);
+               lcd_putc('i');
+               lcd_putint12( mittelstrom);
+               }
+               ist_strom = mittelstrom;
+               OCR1A = mittelstrom;                       // Null strom ergibt 0xFF vom ADC -> Dutycycle of OC1A
             }
             /*
              lcd_gotoxy(6,0);
-            lcd_putint12(soll_spannung);
-*/
-            /*
-            if (TEST == 1)
-            {
-            lcd_gotoxy(6,0);
-            //lcd_putc('i');
-            lcd_putint12(ist_spannung);
-            //lcd_putc(' ');
-            //lcd_putc('s');
-            lcd_putint12(soll_spannung);
-            }
-           
-            if (TEST == 2)
-            {
-            lcd_gotoxy(6,1);
-            lcd_putc('i');
-            lcd_putint12(ist_strom);
-            lcd_putc(' ');
-            lcd_putc('s');
-            lcd_putint12(soll_strom);
-            }
+             lcd_putint12(soll_spannung);
              */
-           // ist_strom =  0;
+            /*
+             if (TEST == 1)
+             {
+             lcd_gotoxy(6,0);
+             //lcd_putc('i');
+             lcd_putint12(ist_spannung);
+             //lcd_putc(' ');
+             //lcd_putc('s');
+             lcd_putint12(soll_spannung);
+             }
+             
+             if (TEST == 2)
+             {
+             lcd_gotoxy(6,1);
+             lcd_putc('i');
+             lcd_putint12(ist_strom);
+             lcd_putc(' ');
+             lcd_putc('s');
+             lcd_putint12(soll_strom);
+             }
+             */
+            // ist_strom =  0;
             
             /*
              //
@@ -1006,11 +1128,11 @@ int main (void)
             //           lcd_putint12(dac_val);
             
 #pragma mark control_loop
-            OSZI_B_LO;
+            //   OSZI_B_LO;
             
             control_loop(); //2.5us
             
-            OSZI_B_HI;
+            //  OSZI_B_HI;
             //lcd_puthex(currentcontrol);
             
             
@@ -1024,17 +1146,17 @@ int main (void)
          
          switch (TEST)
          {
-         case 1: // nur Spannung
+            case 1: // nur Spannung
             {
-               lcd_gotoxy(6,0);
+               lcd_gotoxy(5,0);
                //lcd_putc('i');
                lcd_putint12(ist_spannung);
-               //lcd_putc(' ');
+               lcd_putc(' ');
                //lcd_putc('s');
                lcd_putint12(soll_spannung);
             }break;
- 
-         case 2: // nur Strom
+               
+            case 2: // nur Strom
             {
                
                lcd_gotoxy(6,1);
@@ -1044,16 +1166,16 @@ int main (void)
                lcd_putc('s');
                lcd_putint12(soll_strom);
             }break;
-
-         case 3:
+               
+            case 3:
             {
                lcd_gotoxy(6,0);
-               //lcd_putc('i');
+               lcd_putc('i');
                lcd_putint12(ist_spannung);
-               //lcd_putc(' ');
-               //lcd_putc('s');
+               lcd_putc(' ');
+               lcd_putc('s');
                lcd_putint12(soll_spannung);
-
+               
                
                lcd_gotoxy(6,1);
                lcd_putc('i');
@@ -1061,208 +1183,233 @@ int main (void)
                lcd_putc(' ');
                lcd_putc('s');
                lcd_putint12(soll_strom);
+            }break;
+               
+            default:
+            {
+               lcd_gotoxy(0,1);
+               lcd_putint12(soll_spannung);
+               lcd_putc(' ');
+               lcd_putint12(ist_spannung);
             }break;
          } // switch
-
+         
          /*
-         lcd_gotoxy(0,0);
-         lcd_putc('L');
-         lcd_puthex(spi_rxbuffer[2]);
-         lcd_putc(' ');
-         lcd_putc('H');
-         lcd_puthex(spi_rxbuffer[3]);
-        */
+          lcd_gotoxy(0,0);
+          lcd_putc('L');
+          lcd_puthex(spi_rxbuffer[2]);
+          lcd_putc(' ');
+          lcd_putc('H');
+          lcd_puthex(spi_rxbuffer[3]);
+          */
          /*
-         // Stufenschalter
-         lcd_gotoxy(5,1);
-         lcd_putc('S');
-         lcd_puthex(switch_in);
+          // Stufenschalter
+          lcd_gotoxy(5,1);
+          lcd_putc('S');
+          lcd_puthex(switch_in);
           */
          //lcd_putc(' ');
          //lcd_putc('H');
          //lcd_puthex(adc_H);
-
+         
          
          /*
-         lcd_gotoxy(10,0);
-         lcd_putint12((spi_txbuffer[2] | (spi_txbuffer[3]<<8))>>4); // 12 bit
-         //lcd_putint16((adc_L | (adc_H<<8)));
-         lcd_putc(' ');
-       */
+          lcd_gotoxy(10,0);
+          lcd_putint12((spi_txbuffer[2] | (spi_txbuffer[3]<<8))>>4); // 12 bit
+          //lcd_putint16((adc_L | (adc_H<<8)));
+          lcd_putc(' ');
+          */
          
          
          // Strom
-   //      lcd_putint12(ext_strom);
-         
-         
-         lcd_gotoxy(4,1);
-         lcd_putc('e');
-         lcd_putint12(ext_spannung);
- 
-         lcd_gotoxy(10,1);
-         lcd_putc('i');
-         lcd_putint12(ist_spannung);
-         //lcd_putc('s');
-         //lcd_putint12(soll_spannung); // 12 bit
-         //lcd_gotoxy(18,0);
-         //lcd_puthex(errloop);
-         
-
-      }
-      
-		loopCount0 ++;
-		//_delay_ms(2);
-		
-		if (loopCount0 >=0x00FF)
-		{
-         //OSZI_B_LO;
-         //loopCount2++;
-			//OSZI_A_LO;
-			LOOPLED_PORT ^= (1<<LOOPLED_PIN);
+         //      lcd_putint12(ext_strom);
          
          /*
-			loopCount1++;
-			if ((loopCount1 >0xF0) )
-			{
-            LOOPLED_PORT ^= (1<<LOOPLED_PIN);
-            loopCount1=0;
-
-
-			}
-			*/
-			loopCount0 =0;
+          lcd_gotoxy(4,1);
+          lcd_putc('e');
+          lcd_putint12(ext_spannung);
+          
+          lcd_gotoxy(10,1);
+          //lcd_putc('i');
+          lcd_putint12(ist_spannung);
+          
+          //lcd_putc('s');
+          //lcd_putint12(soll_spannung); // 12 bit
+          //lcd_gotoxy(18,0);
+          //lcd_puthex(errloop);
+          
+          */
+         //       OSZI_A_LO;
+         update_BCD_Array(BCD_Array,ist_spannung);
+         //       OSZI_A_HI;
+         /*
+          lcd_gotoxy(0,2);
+          lcd_putint1(BCD_Array[3]);
+          lcd_putc(' ');
+          lcd_putint1(BCD_Array[2]);
+          lcd_putc(' ');
+          lcd_putint1(BCD_Array[1]);
+          lcd_putc(' ');
+          lcd_putint1(BCD_Array[0]);
+          */
+         
+         
+         
+      }
+      
+      loopCount0 ++;
+      //_delay_ms(2);
+      
+      if (loopCount0 >=0x00FF)
+      {
+         //OSZI_B_LO;
+         //loopCount2++;
+         //OSZI_A_LO;
+         LOOPLED_PORT ^= (1<<LOOPLED_PIN);
+         
+         /*
+          loopCount1++;
+          if ((loopCount1 >0xF0) )
+          {
+          LOOPLED_PORT ^= (1<<LOOPLED_PIN);
+          loopCount1=0;
+          
+          
+          }
+          */
+         loopCount0 =0;
          //OSZI_B_HI;
-		}
-		
+      }
       
       
-#pragma mark Tastatur 
-		/* ******************** */
+      
+#pragma mark Tastatur
+      /* ******************** */
       if (TASTATUR_ON)
       {
-		initADC();
-		Tastenwert=(readKanal(TASTATURPIN)>>2);
-		
-//		lcd_gotoxy(3,1);
-//		lcd_putint(Tastenwert);
-//		Tastenwert=0;
-		if (Tastenwert>5)
-		{
-			/*
-			 0:											1	2	3
-			 1:											4	5	6
-			 2:											7	8	9
-			 3:											x	0	y
-			 4: Schalterpos -
-			 5: Manuell ein
-			 6: Schalterpos +
-			 7: 
-			 8: 
-			 9: 
-			 
-			 12: Manuell aus
-			 */
-			 
-			TastaturCount++;
-			if (TastaturCount>=200)
-			{
-				
-				 
-				 lcd_gotoxy(17,1);
-				 lcd_puts("T:  \0");
-				 //lcd_putint(Tastenwert);
-				 
-				uint8_t Taste=Tastenwahl(Tastenwert);
-				//Taste=0;
-				 lcd_gotoxy(19,1);
-				 lcd_putint1(Taste);
-				 //delay_ms(600);
-				// lcd_clr_line(1);
-				 
-
-				TastaturCount=0;
-				Tastenwert=0x00;
-				uint8_t i=0;
-				uint8_t pos=0;
-//				lcd_gotoxy(18,1);
-//				lcd_putint2(Taste);
-				
-				switch (Taste)
-				{
-					case 0:// Schalter auf Null-Position
-					{ 
-						
-					}break;
-						
-					case 1:	//	
-					{ 
-					}break;
-						
-					case 2://
-					{ 
-					
-							
-					}break;
-						
-					case 3: //	Uhr aus
-					{ 
-					}break;
-						
-					case 4://
-					{ 
-                  uint8_t i=0;
-
-					}break;
-						
-					case 5://
-					{ 
-					}break;
-						
-					case 6://
-					{ 
-					
-					}break;
-						
-					case 7:// Schalter rückwaerts
-					{ 
-					}break;
-						
-					case 8://
-					{ 
-						
-					}break;
-						
-					case 9:// Schalter vorwaerts
-					{ 
-
-					}break;
-
-					case 10:// *
-					{ 
-						
-					}break;
-
-					case 11://
-					{ 
-						
-					}break;
-						
-					case 12: // # Normalbetrieb einschalten
-					{
-					}
-						
-				}//switch Tastatur
-				
-//				delay_ms(400);
-//				lcd_gotoxy(18,1);
-//				lcd_puts("  ");		// Tastenanzeige loeschen
-
-			}//if TastaturCount	
-			
-		}
+         initADC();
+         Tastenwert=(readKanal(TASTATURPIN)>>2);
+         
+         //		lcd_gotoxy(3,1);
+         //		lcd_putint(Tastenwert);
+         //		Tastenwert=0;
+         if (Tastenwert>5)
+         {
+            /*
+             0:											1	2	3
+             1:											4	5	6
+             2:											7	8	9
+             3:											x	0	y
+             4: Schalterpos -
+             5: Manuell ein
+             6: Schalterpos +
+             7:
+             8:
+             9:
+             
+             12: Manuell aus
+             */
+            
+            TastaturCount++;
+            if (TastaturCount>=200)
+            {
+               
+               
+               lcd_gotoxy(17,1);
+               lcd_puts("T:  \0");
+               //lcd_putint(Tastenwert);
+               
+               uint8_t Taste=Tastenwahl(Tastenwert);
+               //Taste=0;
+               lcd_gotoxy(19,1);
+               lcd_putint1(Taste);
+               //delay_ms(600);
+               // lcd_clr_line(1);
+               
+               
+               TastaturCount=0;
+               Tastenwert=0x00;
+               uint8_t i=0;
+               uint8_t pos=0;
+               //				lcd_gotoxy(18,1);
+               //				lcd_putint2(Taste);
+               
+               switch (Taste)
+               {
+                  case 0:// Schalter auf Null-Position
+                  {
+                     
+                  }break;
+                     
+                  case 1:	//	
+                  { 
+                  }break;
+                     
+                  case 2://
+                  { 
+                     
+                     
+                  }break;
+                     
+                  case 3: //	Uhr aus
+                  { 
+                  }break;
+                     
+                  case 4://
+                  { 
+                     uint8_t i=0;
+                     
+                  }break;
+                     
+                  case 5://
+                  { 
+                  }break;
+                     
+                  case 6://
+                  { 
+                     
+                  }break;
+                     
+                  case 7:// Schalter rückwaerts
+                  { 
+                  }break;
+                     
+                  case 8://
+                  { 
+                     
+                  }break;
+                     
+                  case 9:// Schalter vorwaerts
+                  { 
+                     
+                  }break;
+                     
+                  case 10:// *
+                  { 
+                     
+                  }break;
+                     
+                  case 11://
+                  { 
+                     
+                  }break;
+                     
+                  case 12: // # Normalbetrieb einschalten
+                  {
+                  }
+                     
+               }//switch Tastatur
+               
+               //				delay_ms(400);
+               //				lcd_gotoxy(18,1);
+               //				lcd_puts("  ");		// Tastenanzeige loeschen
+               
+            }//if TastaturCount	
+            
+         }
       } // if TASTATUR_ON
-	}
-	
-	
-	return 0;
+   }
+   
+   
+   return 0;
 }

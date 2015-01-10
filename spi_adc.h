@@ -12,7 +12,7 @@
 
 
 #endif
-#ifndef __MCP3208_H_
+#ifndef __MCP3208_H_a
 #define __MCP3208_H_
 
 #define SingleEnd    0x01        // set to Single-End A/D input
@@ -22,9 +22,9 @@
 #define SPI_PORT           PORTB   //PORTB
 #define SPI_CS_ADC                 2
 
-#define SPI_MOSI_PIN               5
+#define SPI_MOSI_PIN               7
 #define SPI_MISO_PIN               6
-#define SPI_SCK_PIN                7
+#define SPI_SCK_PIN                5
 
 #define ADC_DELAY                   1
 
