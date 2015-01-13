@@ -144,8 +144,16 @@ volatile uint8_t out_L=0;
 volatile uint8_t in_H=0;
 volatile uint8_t in_L=0;
 
+// strom_korr
+
+volatile uint8_t strom_korr_24V = 93;
+volatile uint8_t strom_korr_20V = 92;
+volatile uint8_t strom_korr_4V = 64;
+volatile uint16_t strom_korr_diff = 0;
+volatile uint8_t strom_offset = 0;
 
 
+/*
 //volatile uint8_t out[8] = {'H','e','l','l','o',' ',' ',' '};
 volatile uint8_t out[8][8] ={
    {'H','a','l','l','o',' ',' ',' '},
@@ -156,7 +164,7 @@ volatile uint8_t out[8][8] ={
    {'u','n','d',' ','a','u','c','h'},
    {'a','u','f',' ','d','e','n',' '},
    {'T','u','r','m',' ',' ',' ','*'}};
-
+*/
 
 
 // TUX
@@ -169,6 +177,8 @@ static int16_t set_val[2];
 
 uint8_t BCD_Array[4]={};
 
+
+uint8_t offset_array[32] = {64,65,67,68,70,71,73,74,76,77,79,80,81,83,84,86,87,89,90,92,93,94,96,97,99,100,102,103,105,106,108,109};
 void delay_ms(unsigned int ms)
 /* delay for a minimum of <ms> */
 {
@@ -193,6 +203,15 @@ void update_BCD_Array(uint8_t* bcdarray, uint16_t inValue)
    }
    
 }
+
+uint16_t update_U_ganzzahl(uint16_t inValue)
+{
+   
+ return  inValue /= 100;
+   
+}
+
+
 
 // TWI
 
@@ -761,6 +780,9 @@ int main (void)
    
    uint16_t strom_mittel[8]={};
    uint8_t stromschleifecounter=0;
+   
+   strom_korr_diff = (strom_korr_20V - strom_korr_4V)<<8;
+   strom_korr_diff/= 16;
 #pragma mark while
    while (1)
    {
@@ -888,7 +910,7 @@ int main (void)
             
             // Ausgaenge entsprechend Schalterstellung setzen
             
-            // 0: leer
+            // 0: leer // 0x0E wegen Programmer:
             // 1: 10A
             // 2: 100mA
             // 3: 1A
@@ -901,7 +923,7 @@ int main (void)
             {
                case 0x00: // OFF
                {
-                  
+                  switch_out =0x0E;
                }break;
                   
                case 0x01: //50mA
@@ -910,6 +932,7 @@ int main (void)
                   strom_mult = 2;
                   strom_kanal = 1;
                   soll_strom = 1000;
+                  
                   
                }break;
                case 0x02: // 100mA
@@ -950,9 +973,11 @@ int main (void)
             
             //lcd_puthex(switch_out);
             //lcd_puthex(strom_mult);
-            OSZI_A_LO;
+  //          OSZI_A_LO;
+            
+            
             set_SR(switch_out); //
-            OSZI_A_HI;
+  //          OSZI_A_HI;
             //_delay_us(100);
             //spi_adc_restore();
 #pragma mark ADC
@@ -971,12 +996,31 @@ int main (void)
             ist_spannung= MCP3208_spiRead(SingleEnd,3);
             OCR1B = ist_spannung;                      // Dutycycle of OC1B // ergibt bei 3 volle Aussteuerung
             //_delay_us(1);
-            
+            strom_offset = update_U_ganzzahl(ist_spannung);
             soll_strom = 2000;
             // Strom messen
             if (switch_in) // Ein Bereich gewaehlt
             {
                uint16_t akt_strom = 0xFFF - MCP3208_spiRead(SingleEnd,(strom_kanal)) ;
+               
+               if (switch_in <3)
+               {
+                  akt_strom  -= strom_mult*offset_array[strom_offset];
+               }
+
+               uint16_t temp_strom_korr = akt_strom - 73;
+               
+               //uint16_t temp_strom_korr = strom_korr_4V+ ((strom_korr_diff * (ist_spannung - 400))>>8);
+               
+               if (TEST)
+               {
+                  
+                  lcd_gotoxy(0,3);
+                 // lcd_putint12(strom_korr_diff);
+                  lcd_putc(' ');
+                  lcd_putint12(temp_strom_korr);
+                  
+               }
                
                stromschleifecounter &= 0x07;
                //strom_mittel[stromschleifecounter] = (MCP3208_spiRead(SingleEnd,strom_kanal)) ;
@@ -986,7 +1030,7 @@ int main (void)
                   {
                      if (akt_strom < 0xFFF)
                      {
-                        //akt_strom *= strom_mult;
+                          //akt_strom *= strom_mult;
                      }
                      else // Bereichsuerberschreitung
                      {
@@ -1015,14 +1059,28 @@ int main (void)
                if (TEST)
                {
               
-               lcd_gotoxy(0,2);
+                lcd_gotoxy(0,2);
                lcd_putc('a');
-               lcd_putint12( akt_strom);
+               lcd_putint12( akt_strom );
+                  lcd_gotoxy(6,3);
+                  lcd_putc(' ');
+                  lcd_putint1(BCD_Array[3]);
+                  lcd_putc(' ');
+                  lcd_putint1(BCD_Array[2]);
+                  lcd_putc(' ');
+                  lcd_putint1(BCD_Array[1]);
+                  lcd_putc(' ');
+                  lcd_putint1(BCD_Array[0]);
+                  lcd_putc(' ');
+                  //uint16_t aaa=0;
+                  //OSZI_A_LO;
+                  //aaa=update_U_ganzzahl(ist_spannung);
+                  //OSZI_A_HI;
+                  lcd_putint(update_U_ganzzahl(ist_spannung)); // Berechnung: 0.4us
+
                }
                strom_mittel[stromschleifecounter] = akt_strom;
                stromschleifecounter++;
-               
-               
                
                uint8_t index=0;
                uint32_t mittelstrom = 0;
@@ -1191,6 +1249,13 @@ int main (void)
                lcd_putint12(soll_spannung);
                lcd_putc(' ');
                lcd_putint12(ist_spannung);
+               lcd_gotoxy(6,3);
+               lcd_putc(' ');
+               lcd_putint12(BCD_Array[3]);
+               lcd_putc(' ');
+               lcd_putint12(BCD_Array[2]);
+
+               
             }break;
          } // switch
          
@@ -1241,7 +1306,7 @@ int main (void)
           */
          //       OSZI_A_LO;
          update_BCD_Array(BCD_Array,ist_spannung);
-         //       OSZI_A_HI;
+           //     OSZI_A_HI;
          /*
           lcd_gotoxy(0,2);
           lcd_putint1(BCD_Array[3]);
