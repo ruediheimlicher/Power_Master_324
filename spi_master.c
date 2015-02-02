@@ -275,3 +275,26 @@ uint8_t set_SR(uint8_t outData)
    
    
 }
+
+
+uint8_t set_SR_7Seg(uint8_t outData)
+{
+   SRB_CS_LO;
+   _delay_us(1);
+   SPDR0 = outData;
+   spiwaitcounter=0;
+   while(!(SPSR0 & (1<<SPIF0)) )//&& spiwaitcounter < WHILEMAX)
+   {
+      spiwaitcounter++;
+   }
+   
+   //SPCR0 &= ~(1<<CPOL0);
+   //uint8_t in = SPDR0;
+   
+   SRB_CS_HI;
+   SRB_CS_LO;
+   SRB_CS_HI;
+   return SPDR0;
+   
+   
+}

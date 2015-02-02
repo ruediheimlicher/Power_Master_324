@@ -22,7 +22,7 @@ Power_Master.o: Power_Master.c \
  lcd.c lcd.h adc.c adc.h soft_spi.c soft_spi.h \
  /usr/local/CrossPack-AVR-20130212/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
  /usr/local/CrossPack-AVR-20130212/lib/gcc/avr/4.6.2/include/stdarg.h \
- defines.h spi_adc.c spi_adc.h utils.c \
+ defines.h spi_adc.c spi_adc.h spi_ram.c spi_ram.h utils.c \
  /usr/local/CrossPack-AVR-20130212/lib/gcc/avr/4.6.2/../../../../avr/include/string.h \
  /usr/local/CrossPack-AVR-20130212/lib/gcc/avr/4.6.2/../../../../avr/include/avr/pgmspace.h \
  /usr/local/CrossPack-AVR-20130212/lib/gcc/avr/4.6.2/../../../../avr/include/avr/eeprom.h \
@@ -94,6 +94,10 @@ defines.h:
 spi_adc.c:
 
 spi_adc.h:
+
+spi_ram.c:
+
+spi_ram.h:
 
 utils.c:
 

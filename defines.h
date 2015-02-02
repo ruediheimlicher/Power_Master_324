@@ -16,6 +16,9 @@
 #define UPDATE_MEAS  0
 #define UPDATE_DISP  1
 
+#define UPDATE_SWITCH_SR 2
+#define UPDATE_7SEG_SR 3
+
 #define LOOPLED_PORT	PORTD
 #define LOOPLED_DDR	DDRD
 #define LOOPLED_PIN	7
@@ -79,6 +82,18 @@
 #define OSZI_B_HI OSZIPORT |= (1<<OSZI_PULS_B)
 #define OSZI_B_TOGG OSZIPORT ^= (1<<OSZI_PULS_B)
 
-
+/*
+ code-tabelle
+ .db  0b11000000     ; 0: a, b, c, d, e, f
+ .db  0b11111001     ; 1: b, c
+ .db  0b10100100     ; 2: a, b, d, e, g
+ .db  0b10110000     ; 3: a, b, c, d, g
+ .db  0b10011001     ; 4: b, c, f, g
+ .db  0b10010010     ; 5: a, c, d, f, g
+ .db  0b10000010     ; 6: a, c, d, e, f, g
+ .db  0b11111000     ; 7: a, b, c
+ .db  0b10000000     ; 8: a, b, c, d, e, f, g
+ .db  0b10010000     ; 9: a, b, c, d, f, g
+ */
 
 

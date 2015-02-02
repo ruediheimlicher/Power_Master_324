@@ -741,6 +741,21 @@ void lcd_put_tempbis99(uint16_t temperatur)
    lcddelay_ms(2);
 }
 
+void lcd_CGRAMInit_Inst(void)
+{
+   uint8_t i=0;
+   lcd_load_byte(0x48);
+   lcd_send_cmd();
+   
+   for (i=0;i<3;i++)	//				beide h	Tag voll, Nacht off			- -	char 1
+   {
+      lcd_putc(0x1B);
+      lcd_send_char();
+   }
+   lcd_load_byte(0x00);//freie Linie
+   lcd_send_char();
+
+}
 
 void lcd_CGRAMInit_Mode(void)
 {

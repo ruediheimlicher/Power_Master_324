@@ -22,6 +22,7 @@
 
 #include "soft_spi.c"
 #include "spi_adc.c"
+#include "spi_ram.c"
 
 
 #include "utils.c"
@@ -100,12 +101,16 @@ volatile uint16_t rot_loopcount_L=0x00;
 volatile uint16_t rot_loopcountA_H=0x0000;
 volatile uint16_t rot_loopcountB_H=0x0000;
 volatile uint16_t rot_control=0x0000;
+
 volatile uint8_t old_rot_pin=1;
 volatile uint8_t new_rot_pin=1;
 volatile uint8_t akt_rot_pin=1;
 volatile uint8_t rot_changecount=0;
 
 volatile uint16_t disp_loopcount_L=0x00;
+
+volatile uint16_t SR_loopcount_L=0x00;
+volatile uint8_t SR_loopcount_H=0x00;
 
 volatile uint16_t ist_spannung=0;
 volatile uint16_t ist_strom=0;
@@ -153,6 +158,9 @@ volatile uint16_t strom_korr_diff = 0;
 volatile uint8_t strom_offset = 0;
 
 
+// 7-Segment
+volatile uint8_t seg_loop=0;
+
 /*
 //volatile uint8_t out[8] = {'H','e','l','l','o',' ',' ',' '};
 volatile uint8_t out[8][8] ={
@@ -178,7 +186,8 @@ static int16_t set_val[2];
 uint8_t BCD_Array[4]={};
 
 
-uint8_t offset_array[32] = {64,65,67,68,70,71,73,74,76,77,79,80,81,83,84,86,87,89,90,92,93,94,96,97,99,100,102,103,105,106,108,109};
+uint8_t offset_array_A[32] = {64,65,67,68,70,71,73,74,76,77,79,80,81,83,84,86,87,89,90,92,93,94,96,97,99,100,102,103,105,106,108,109};
+
 void delay_ms(unsigned int ms)
 /* delay for a minimum of <ms> */
 {
@@ -203,6 +212,51 @@ void update_BCD_Array(uint8_t* bcdarray, uint16_t inValue)
    }
    
 }
+
+void double_dabble_16_int(uint8_t stellen, uint8_t *result, uint16_t in_value)
+{
+   int nscratch = stellen+1;   /* length of scratch in bytes */
+   char *scratch = calloc(1 + nscratch, sizeof *scratch);
+   int  j, k;
+   int smin = nscratch-2;    /* speed optimization */
+   
+   {
+      for (j=0; j < 16; ++j)
+      {
+         /* This bit will be shifted in on the right. */
+         int shifted_in = (in_value & (1 << (15-j)))? 1: 0;
+         
+         /* Add 3 everywhere that scratch[k] >= 5. */
+         for (k=smin; k < nscratch; ++k)
+            scratch[k] += (scratch[k] >= 5)? 3: 0;
+         
+         /* Shift scratch to the left by one position. */
+         if (scratch[smin] >= 8)
+            smin -= 1;
+         for (k=smin; k < nscratch-1; ++k) {
+            scratch[k] <<= 1;
+            scratch[k] &= 0xF;
+            scratch[k] |= (scratch[k+1] >= 8);
+         }
+         
+         /* Shift in the new bit from arr. */
+         scratch[nscratch-1] <<= 1;
+         scratch[nscratch-1] &= 0xF;
+         scratch[nscratch-1] |= shifted_in;
+      }
+   }
+   
+   /* Remove leading zeros from the scratch space. */
+   for (k=0; k < nscratch; k++)
+   {
+      //  printf("+++  %d\t%d\n",k,scratch[k]);
+      result[k]=scratch[k+1];
+   }
+   
+   free(scratch);
+   return;
+}
+
 
 uint16_t update_U_ganzzahl(uint16_t inValue)
 {
@@ -532,7 +586,7 @@ void timer0 (void) // Grundtakt fuer Stoppuhren usw.
    //OCR0A = 0x02;
    
    TIFR0 |= (1<<TOV0);
-   //TIFR |= (1<<TOV0);		//Clear TOV0 Timer/Counter Overflow Flag. clear pending interrupts
+   //TIFR |= (1<<TOV0);		//Clear TOV0 Timer/Counter Overflow Flag. Clear pending interrupts
    TIMSK0 |= (1<<TOIE0);	//Overflow Interrupt aktivieren
    TCNT0 = 0;					//Rücksetzen des Timers
    
@@ -568,7 +622,21 @@ ISR (TIMER0_OVF_vect)
       disp_loopcount_L=0;
    }
    
-   
+   SR_loopcount_L++;
+   if (SR_loopcount_L > 0x0A)
+   {
+      SR_loopcount_L=0;
+      SR_loopcount_H++;
+      
+      if (SR_loopcount_H %2)
+      {
+         updateOK |= (1<< UPDATE_SWITCH_SR);
+      }
+      else
+      {
+         updateOK |= (1<< UPDATE_7SEG_SR);
+      }
+   }
 }
 
 void timer1(void)
@@ -671,7 +739,11 @@ static void control_loop(void)
    if (tmp==0) return; // nothing to change
    
    // put a cap on increase
-   if (tmp>1)
+   if (tmp > 20)
+   {
+       tmp=10;
+   }
+   else if (tmp>1)
    {
       tmp=1;
    }
@@ -768,7 +840,7 @@ int main (void)
    
    //spistatus |= (1<< TEENSY_SEND);
    
-   soll_spannung = 1000;
+   soll_spannung = 1048;
    currentcontrol=1; // 0=voltage control, 1 current control
    //lcd_gotoxy(6,0);
    //lcd_putsignedint(-12);
@@ -776,7 +848,10 @@ int main (void)
    
    
    timer1();
-   
+
+   uint16_t spannung_mittel[16]={};
+   uint8_t spannungschleifecounter=0;
+
    
    uint16_t strom_mittel[8]={};
    uint8_t stromschleifecounter=0;
@@ -929,7 +1004,7 @@ int main (void)
                case 0x01: //50mA
                {
                   switch_out |= (1<<2);
-                  strom_mult = 2;
+                  //strom_mult = 2;
                   strom_kanal = 1;
                   soll_strom = 1000;
                   
@@ -944,7 +1019,7 @@ int main (void)
                case 0x03: // 500mA
                {
                   switch_out |= (1<<3);
-                  strom_mult = 2;
+                  //strom_mult = 2;
                   strom_kanal = 0;
                }break;
                case 0x04: // 1A
@@ -956,7 +1031,7 @@ int main (void)
                {
                   switch_out |= (1<<1);
                   strom_kanal = 2;
-                  strom_mult = 2;
+                  //strom_mult = 2;
                }break;
                case 0x06: // 10A
                {
@@ -973,11 +1048,11 @@ int main (void)
             
             //lcd_puthex(switch_out);
             //lcd_puthex(strom_mult);
-  //          OSZI_A_LO;
+            //          OSZI_A_LO;
             
             
             set_SR(switch_out); //
-  //          OSZI_A_HI;
+            //          OSZI_A_HI;
             //_delay_us(100);
             //spi_adc_restore();
 #pragma mark ADC
@@ -996,29 +1071,81 @@ int main (void)
             ist_spannung= MCP3208_spiRead(SingleEnd,3);
             OCR1B = ist_spannung;                      // Dutycycle of OC1B // ergibt bei 3 volle Aussteuerung
             //_delay_us(1);
+            spannungschleifecounter &= 0x0F;
+            spannung_mittel[spannungschleifecounter] = ist_spannung;
+            spannungschleifecounter++;
+           
+            
+            
             strom_offset = update_U_ganzzahl(ist_spannung);
-            soll_strom = 2000;
+            soll_strom = 1500;
+            
+            
             // Strom messen
             if (switch_in) // Ein Bereich gewaehlt
             {
-               uint16_t akt_strom = 0xFFF - MCP3208_spiRead(SingleEnd,(strom_kanal)) ;
+               uint32_t akt_strom = 0xFFF - MCP3208_spiRead(SingleEnd,(strom_kanal)) ;
                
-               if (switch_in <3)
+               switch (switch_in)
                {
-                  akt_strom  -= strom_mult*offset_array[strom_offset];
-               }
-
-               uint16_t temp_strom_korr = akt_strom - 73;
+                  case 0:
+                     break;
+                     
+                  case 1:
+                  {
+                     akt_strom  -= offset_array_A[strom_offset]; // Korr.Faktor
+                     
+                     // Mult by 2.5 Bereich 0-4// 4.5us
+            //         OSZI_A_LO;
+                     akt_strom *=10; //
+                     akt_strom /= 4;
+            //         OSZI_A_HI;
+                     /*
+                      // Mult by 3.333 Bereich 0-3// 12us
+                      OSZI_A_LO;
+                      akt_strom *=10; // 1.3us
+                      // Div by 3
+                      // http://embeddedgurus.com/stack-overflow/tag/division/
+                      
+                      akt_strom = (((uint32_t)akt_strom * (uint32_t)0xAAAB) >> 16) >> 1;                   // 10us
+                      OSZI_A_HI;
+                      */
+                  }break;
+                  case 2:
+                  {
+                     OSZI_A_LO;
+                     akt_strom  -= offset_array_A[strom_offset]; // Korr.Faktor
+                     OSZI_A_HI;
+                  }break;
+                     
+                  case 3:
+                  case 5:
+                  {
+                     OSZI_A_LO;
+                     akt_strom *=10; // 1 us
+                     akt_strom /= 4;
+                     OSZI_A_HI;
+                  }break;
+                  default:
+                  {
+                     
+                  }break;
+               }// switch
+               
+               
+               
+               
+               //    uint16_t temp_strom_korr = akt_strom - 73;
                
                //uint16_t temp_strom_korr = strom_korr_4V+ ((strom_korr_diff * (ist_spannung - 400))>>8);
                
                if (TEST)
                {
                   
-                  lcd_gotoxy(0,3);
-                 // lcd_putint12(strom_korr_diff);
-                  lcd_putc(' ');
-                  lcd_putint12(temp_strom_korr);
+                  //  lcd_gotoxy(0,3);
+                  // lcd_putint12(strom_korr_diff);
+                  //lcd_putc(' ');
+                  //lcd_putint12(temp_strom_korr);
                   
                }
                
@@ -1030,14 +1157,14 @@ int main (void)
                   {
                      if (akt_strom < 0xFFF)
                      {
-                          //akt_strom *= strom_mult;
+                        //akt_strom *= strom_mult;
                      }
                      else // Bereichsuerberschreitung
                      {
                         akt_strom=0;
-                        switch_out ^= (1<<7); // bit 7 toggeln,
+                        switch_out ^= (1<<7); // bit 7 toggeln, Buzzer
                      }
-                    
+                     
                   }break;
                   case 2:
                   {
@@ -1048,9 +1175,9 @@ int main (void)
                      else // Bereichsuerberschreitung
                      {
                         akt_strom=0;
-                        switch_out ^= (1<<7); // bit 7 toggeln,
+                        switch_out ^= (1<<7); // bit 7 toggeln, Buzzer
                      }
-
+                     
                      
                   }break;
                      
@@ -1058,10 +1185,10 @@ int main (void)
                
                if (TEST)
                {
-              
-                lcd_gotoxy(0,2);
-               lcd_putc('a');
-               lcd_putint12( akt_strom );
+                  /*
+                  lcd_gotoxy(0,2);
+                  lcd_putc('a');
+                  lcd_putint12( akt_strom );
                   lcd_gotoxy(6,3);
                   lcd_putc(' ');
                   lcd_putint1(BCD_Array[3]);
@@ -1077,7 +1204,7 @@ int main (void)
                   //aaa=update_U_ganzzahl(ist_spannung);
                   //OSZI_A_HI;
                   lcd_putint(update_U_ganzzahl(ist_spannung)); // Berechnung: 0.4us
-
+                  */
                }
                strom_mittel[stromschleifecounter] = akt_strom;
                stromschleifecounter++;
@@ -1094,9 +1221,9 @@ int main (void)
                
                if (TEST)
                {
-               lcd_gotoxy(12,2);
-               lcd_putc('i');
-               lcd_putint12( mittelstrom);
+                  lcd_gotoxy(12,2);
+                  lcd_putc('m');
+                  lcd_putint12( mittelstrom);
                }
                ist_strom = mittelstrom;
                OCR1A = mittelstrom;                       // Null strom ergibt 0xFF vom ADC -> Dutycycle of OC1A
@@ -1241,10 +1368,12 @@ int main (void)
                lcd_putc(' ');
                lcd_putc('s');
                lcd_putint12(soll_strom);
+            
             }break;
                
             default:
             {
+               /*
                lcd_gotoxy(0,1);
                lcd_putint12(soll_spannung);
                lcd_putc(' ');
@@ -1254,7 +1383,7 @@ int main (void)
                lcd_putint12(BCD_Array[3]);
                lcd_putc(' ');
                lcd_putint12(BCD_Array[2]);
-
+               */
                
             }break;
          } // switch
@@ -1287,7 +1416,7 @@ int main (void)
          
          
          // Strom
-         //      lcd_putint12(ext_strom);
+         // lcd_putint12(ext_strom);
          
          /*
           lcd_gotoxy(4,1);
@@ -1304,23 +1433,69 @@ int main (void)
           //lcd_puthex(errloop);
           
           */
-         //       OSZI_A_LO;
-         update_BCD_Array(BCD_Array,ist_spannung);
-           //     OSZI_A_HI;
+         //        OSZI_A_LO;
+         
+         //double_dabble_16_int(4, BCD_Array, ist_spannung);
+         
+         //update_BCD_Array(BCD_Array,ist_spannung);
+      }
+      if (updateOK & (1<< UPDATE_7SEG_SR))
+      {
+         seg_loop++;
+         updateOK &= ~(1<< UPDATE_7SEG_SR);
+         
+         
+         uint8_t index=0;
+         uint32_t mittelspannung = 0;
+         for (index=0;index<16;index++)
+         {
+            mittelspannung += (spannung_mittel[index]);
+         }
+         mittelspannung /= 16;
+
+         update_BCD_Array(BCD_Array,mittelspannung);
+         
          /*
           lcd_gotoxy(0,2);
           lcd_putint1(BCD_Array[3]);
-          lcd_putc(' ');
+         // lcd_putc(' ');
           lcd_putint1(BCD_Array[2]);
-          lcd_putc(' ');
+         // lcd_putc(' ');
           lcd_putint1(BCD_Array[1]);
-          lcd_putc(' ');
+         // lcd_putc(' ');
           lcd_putint1(BCD_Array[0]);
+         */
+         
+
+         seg_loop &= 0x07;
+         
+         if (seg_loop == 0)
+         {
+             OSZI_A_LO;
+         }
+         //uint8_t seg_data = ((BCD_Array[seg_loop] & 0x0F));
+         /*
+          BCD_Array[0]=2;
+          BCD_Array[1]=3;
+          BCD_Array[2]=4;
+          BCD_Array[3]=6;
           */
+         uint8_t seg_data = ((BCD_Array[seg_loop] & 0x0F));
+         //uint8_t seg_data = 3;//((BCD_Array[1] & 0x0F));
          
+         seg_data |= (1<<(seg_loop+4));
          
+         //   seg_data = 13;
+        // lcd_gotoxy(0,3);
+        // lcd_puthex(seg_data);
          
+         //set_SR_7Seg(BCD_Array[seg_loop & 0x03]);
+         set_SR_7Seg(seg_data);
+          OSZI_A_HI;
       }
+      
+      //      OSZI_A_HI;
+      
       
       loopCount0 ++;
       //_delay_ms(2);
@@ -1345,8 +1520,7 @@ int main (void)
          loopCount0 =0;
          //OSZI_B_HI;
       }
-      
-      
+            
       
 #pragma mark Tastatur
       /* ******************** */
@@ -1406,56 +1580,56 @@ int main (void)
                      
                   }break;
                      
-                  case 1:	//	
-                  { 
+                  case 1:	//
+                  {
                   }break;
                      
                   case 2://
-                  { 
+                  {
                      
                      
                   }break;
                      
                   case 3: //	Uhr aus
-                  { 
+                  {
                   }break;
                      
                   case 4://
-                  { 
+                  {
                      uint8_t i=0;
                      
                   }break;
                      
                   case 5://
-                  { 
+                  {
                   }break;
                      
                   case 6://
-                  { 
+                  {
                      
                   }break;
                      
                   case 7:// Schalter rückwaerts
-                  { 
+                  {
                   }break;
                      
                   case 8://
-                  { 
+                  {
                      
                   }break;
                      
                   case 9:// Schalter vorwaerts
-                  { 
+                  {
                      
                   }break;
                      
                   case 10:// *
-                  { 
+                  {
                      
                   }break;
                      
                   case 11://
-                  { 
+                  {
                      
                   }break;
                      
@@ -1469,7 +1643,7 @@ int main (void)
                //				lcd_gotoxy(18,1);
                //				lcd_puts("  ");		// Tastenanzeige loeschen
                
-            }//if TastaturCount	
+            }//if TastaturCount
             
          }
       } // if TASTATUR_ON
