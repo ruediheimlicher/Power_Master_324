@@ -21,7 +21,7 @@ extern volatile uint8_t out_L;
 extern volatile uint8_t in_H;
 extern volatile uint8_t in_L;
 
-//extern volatile uint8_t switch_in[8];
+//extern volatile uint8_t new_switch_in[8];
 
 #define nop()  asm volatile("nop\n\t"::)
 
@@ -509,11 +509,11 @@ uint8_t getSwitch(void)
       if (SOFT_SPI_PIN & (1<<SOFT_MISO)) // Pin ist HI
       {
          temp |= (1<< (7-i));
-         //switch_in[i] |= (1<< (7-i));
+         //new_switch_in[i] |= (1<< (7-i));
       }
       else    // Pin ist LO
       {
-         //switch_in[i]  &= ~(1<< (7-i));
+         //new_switch_in[i]  &= ~(1<< (7-i));
          temp  &= ~(1<< (7-i));
       }
       
