@@ -190,6 +190,7 @@ uint8_t BCD_Array[4]={};
 
 
 uint8_t offset_array_A[32] = {64,65,67,68,70,71,73,74,76,77,79,80,81,83,84,86,87,89,90,92,93,94,96,97,99,100,102,103,105,106,108,109};
+uint8_t offset_array_B[32] = {64,65,67,68,70,71,73,74,76,77,79,80,81,83,84,86,87,89,90,92,93,94,96,97,99,100,102,103,105,106,108,109};
 
 void delay_ms(unsigned int ms)
 /* delay for a minimum of <ms> */
@@ -851,6 +852,8 @@ int main (void)
    
    strom_korr_diff = (strom_korr_20V - strom_korr_4V)<<8;
    strom_korr_diff/= 16;
+   
+   
 #pragma mark while
    while (1)
    {
@@ -987,66 +990,75 @@ int main (void)
                // 0: leer // 0x0E wegen Programmer:
                // 1: 3A, 10A
                // 2: 30mA, 100mA
-               // 3: 300mA, 1A
+               // 3: 300mA, 1A      // neu nicht mehr aktiviert
                
                
                // Strom-Kanal am AD-Wandler:
-               // 0: 300mA, 1A
-               // 1: 30mA, 100mA
+               
+               // 0: 30mA, 100mA
+               // 1: 300mA, 1A
                // 2: 3A, 10A
                // 3: Spannung
                
                
                
+               
+               
                switch_out &= ~0x0E; // reset der Schalterwerte, alle LO (PNP): Messung ueberbruecken
                
+               // 1 schaltet den Stromsensor ab
                strom_mult = 1;
+               soll_strom = 2000;
                switch (new_switch_in)
                {
                   case 0x00: // OFF
                   {
-                     switch_out =0x0E;
+                     switch_out |= 0x0E;
+                     //OCR1A = 0; // Stromanzeige resetten
                   }break;
                      
-                  case 0x01: //50mA
+                  case 0x01: //50mA // kein Bereich blockiert
                   {
                      switch_out &= ~0x0E; // reset
                      switch_out |= (1<<2)|(1<<1); //
-                     //strom_mult = 2;
-                     strom_kanal = 1;
-   //                  soll_strom = 1000;
+                     strom_mult = 2;
+                     strom_kanal = 0;
+                     //soll_strom = 25;
                      
                      
                   }break;
-                  case 0x02: // 100mA
+                  case 0x02: // 100mA // kein Bereich blockiert
                   {
                      switch_out &= ~0x0E; // reset
                      switch_out |= (1<<2)|(1<<1);
-                     strom_kanal = 1;
-   //                  soll_strom = 1000;
+                     strom_kanal = 0;
+                     //soll_strom = 100;
                   }break;
                      
-                  case 0x03: // 500mA
+                  case 0x03: // 500mA // Bereich A blockiert
                   {
                      switch_out &= ~0x0E; // reset
-                     switch_out |= (1<<3)|(1<<1);
+                     switch_out |= (1<<1);
                      strom_mult = 2;
-                     strom_kanal = 0;
+                     strom_kanal = 1;
+                     //soll_strom = 250;
                   }break;
                      
-                  case 0x04: // 1A
+                  case 0x04: // 1A // Bereich A blockiert
                   {
                      switch_out &= ~0x0E; // reset
-                     switch_out |= (1<<3)|(1<<1);
-                     strom_kanal = 0;
+                     switch_out |= (1<<1);
+                     strom_kanal = 1;
+                     //soll_strom = 1000;
                   }break;
                      
-                  case 0x05: // 5A
+                  case 0x05: // 5A //
                   {
                      switch_out &= ~0x0E; // reset
                      //switch_out |= (1<<1);
                      strom_kanal = 2;
-                     //strom_mult = 2;
+                     strom_mult = 2;
+                     //soll_strom = 2500;
                   }break;
                      
                   case 0x06: // 10A
@@ -1058,7 +1070,7 @@ int main (void)
                   default:
                   {
                      //switch_out &= ~0x0E; // reset
-                     strom_mult = 0;
+                     strom_mult = 1;
                   }
                      
                }// switch
@@ -1118,9 +1130,13 @@ int main (void)
                
                uint32_t akt_strom = MCP3208_spiRead(SingleEnd,(strom_kanal)) ;
                
-               if (TEST)
+               if (TEST>1)
                {
                   lcd_gotoxy(0,3);
+                  lcd_putint(strom_kanal);
+                  lcd_putc(' ');
+                  lcd_putint(offset_array_A[strom_offset]);
+                  lcd_putc(' ');
                   lcd_putint12(akt_strom);
                   
                }
@@ -1129,19 +1145,20 @@ int main (void)
                {
                   case 0:
                   {
-                     
+                     akt_strom = 0;
                   }
                      break;
                      
-                  case 1:
+                  case 1: // 50mA
                   {
                      akt_strom = 0xFFF - akt_strom - offset_array_A[strom_offset]; // Korr.Faktor
                      
                      // Mult by 2.5 Bereich 0-4// 4.5us
             //         OSZI_A_LO;
-                     akt_strom *=10; //
-                     akt_strom /= 4;
-            //         OSZI_A_HI;
+                     //akt_strom *=10; //
+                     //akt_strom /= 4;
+                     akt_strom *= 2;
+                     //         OSZI_A_HI;
                      
                      /*
                       // Mult by 3.333 Bereich 0-3// 12us
@@ -1154,24 +1171,25 @@ int main (void)
                       OSZI_A_HI;
                       */
                   }break;
-                  case 2:
+                  case 2: // 100mA
                   {
                     // OSZI_A_LO;
                      akt_strom = 0xFFF - akt_strom - offset_array_A[strom_offset]; // Korr.Faktor
                      OSZI_A_HI;
                   }break;
                      
-                  case 3:
+                  case 3: // 500mA
                   {
                     // OSZI_A_LO;
                      akt_strom = 0xFFF - akt_strom;
-                     akt_strom *=10; // 1 us
-                     akt_strom /= 4;
+                     //akt_strom *=10; // 1 us
+                     //akt_strom /= 4;
+                     akt_strom *= 2;
                      OSZI_A_HI;
                      
                      
                   }break;
-                  case 4:
+                  case 4: // 1A
                   {
                      akt_strom = 0xFFF - akt_strom;
                      // OSZI_A_LO;
@@ -1179,28 +1197,23 @@ int main (void)
                      
                      
                   }break;
-                  case 5:
+                  case 5: // 5A
                   {
                      // OSZI_A_LO;
-                     if (akt_strom > 2500)
-                     {
-                        akt_strom -= 2500; //Mitte als Nullpunkt bei Hall-Sensor
-                     }
-                     
-                  //   akt_strom *= 2; // Bereich von 2.5 - 5 V
-                 //    akt_strom *=10; // 1 us
-                     akt_strom /= 4;
+                     akt_strom = 0xFFF - akt_strom;
+                     //akt_strom *=10; // 1 us
+                     //akt_strom /= 4;
+                     akt_strom *= 2;
                      OSZI_A_HI;
                      
                      
   
                   }break;
                      
-                  case 6:
+                  case 6: // 10A
                   {
                      // OSZI_A_LO;
-              //       akt_strom -= 0x9C4; //Mitte als Nullpunkt bei Hall-Sensor
-               //      akt_strom *= 2; // Bereich von 2.5 - 5 V
+                     akt_strom = 0xFFF - akt_strom;
                      OSZI_A_HI;
                      
                      
@@ -1208,7 +1221,7 @@ int main (void)
 
                   default:
                   {
-                     
+                     akt_strom = 0;
                   }break;
                }// switch
                
@@ -1269,6 +1282,7 @@ int main (void)
                {
                   
                }
+               
                if (TEST)
                {
                   /*

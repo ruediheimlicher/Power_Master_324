@@ -3,7 +3,7 @@
  * defines
  */
 
-#define TEST 3
+#define TEST 1
 
 #define OHNE_TEENSY 1
 

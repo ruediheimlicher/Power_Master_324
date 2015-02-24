@@ -1,0 +1,1 @@
+Software für ein Labor-Netzgerät basierend auf dem Konzept von tuxgraphics.org
